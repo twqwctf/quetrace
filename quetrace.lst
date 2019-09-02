@@ -1,0 +1,1018 @@
+VPas Version 1.01 [26-Aug-88]
+
+
+ 0    1: {$X+}
+ 0    2: program quetrace(input,output,outfile);
+ 0    3: 
+ 0    4: (********************************************************************************
+ 0    5:  *                                                                              *
+ 0    6:  * Program: quetrace                                                            *
+ 0    7:  * Programmer: Greg Fudala                                                      *
+ 0    8:  * Soc. sec #: xxx-xx-xxxx                                                      *
+ 0    9:  * Due Date: January 31, 1989                                                   *
+ 0   10:  * System: Apple Mac II                                                         *
+ 0   11:  * Compiler: VP                                                                 *
+ 0   12:  *                                 Purpose                                      *
+ 0   13:  *                                                                              *
+ 0   14:  * This program illustrates the structure of a Queue Data Structure. The        *
+ 0   15:  * modules that manipulate the queue structure are done in accordance to the    *
+ 0   16:  * definition of a queue; that is, encapsulation is not being violated. The     *
+ 0   17:  * program consists of a queue package- the modules that manipulate a queue,    *
+ 0   18:  * and other modules that do not actually manipulate a queue. The queue package *
+ 0   19:  * consists of the modules enq,deq,printque,quetraceenq,quetracedeq. The rest   *
+ 0   20:  * of the program consists of modules that do not manipulate the queue, but     *
+ 0   21:  * do other tasks like print a startup screen or determine whether a queue is   *
+ 0   22:  * empty or not. Each module's description will specify whether it is part of   *
+ 0   23:  * the queue package or not.                                                    *
+ 0   24:  * The program also includes a trace facility which allows the user to 'see'    *
+ 0   25:  * a queue even as it is being manipulated. A queue is actualy stored in an     *
+ 0   26:  * array by which the program can manipulate(but not violate encapsulation) a   *
+ 0   27:  * queue. The trace facility will be explained in detail below in the           *
+ 0   28:  * appropriate module.                                                          *
+ 0   29:  * The program also outputs a queue to an output file when directed in the main *
+ 0   30:  * driver of the program.                                                       *
+ 0   31:  *                                                                              *
+ 0   32:  * Input : None                                                                 *
+ 0   33:  * Output: Output of a queue is sent to the file 'output.que'                   *
+ 0   34:  *                                                                              *
+ 0   35:  ********************************************************************************)
+ 0   36:  
+ 0   37: 
+ 0   38: USES rawio;          (* allows the compiler to compile raw input/output *)
+Symbols in NORMAL_IO:
+
+	NORMAL_IO [1,244] Procedure
+
+	Type size: 0
+	0 bytes of parameters
+	0 result address
+
+Symbols in DIRECT_IO:
+
+	DIRECT_IO [1,244] Procedure
+VPas Version 1.01 [26-Aug-88]
+
+
+
+	Type size: 0
+	0 bytes of parameters
+	0 result address
+
+ 0   39: 
+ 0   40: const
+ 0   41:    maxqueue=100;      (* maximum number of elements allowed in a queue *)
+ 0   42:    leastcol=31;       (* the leftmost column of the trace facility *)
+ 0   43:    mostcol=51;        (* the rightmost column of the trace facility *)
+ 0   44:    escape=27;         (* the ASCII representation for the escape <esc> char. *)
+ 0   45:    firstrow=21;       (* the uppermost row of the trace facility *)
+ 0   46:    secondrow=22;      (* the second row of the trace facility *)
+ 0   47:    thirdrow=23;       (* the third row of the trace facility *)
+ 0   48:    fourthrow=24;      (* the lowermost row of the trace facility *)
+ 0   49:    leastelemcol=32;   (* the leftmost column of the element insertation of trace
+ 0   50:                          facility *)
+ 0   51:    mostelemcol=50;    (* the rightmost column of the element insertation of trace
+ 0   52:                          facility *)
+ 0   53:    numelemintrace=10; (* number of elements in trace *)
+ 0   54:    toprowcol=1;       (* the lowest(value) low or column on the screen *)
+ 0   55:    clearindex=0;      (* index which sets a queue to be clear *)
+ 0   56:    wait=100000;       (* time delay *)
+ 0   57:    blank=' ';         (* blank space *)
+ 0   58:    bar='|';           (* bar for trace facility *)
+ 0   59:    heading='front     QUEUE  rear';     (* trace heading *)
+ 0   60:    horzbar='-';       (* horizontal bar for trace *)
+ 0   61: 
+ 0   62: type
+ 0   63:    elementtype=char;        (* type for queue elements *)
+ 0   64:    dummygetchar=char;       (* allows the user to hit a key of type char to 
+ 0   65:                                continue *)
+ 0   66:    indextype=0..maxqueue;   (* index type for the array which holds a queue *)
+ 0   67: 
+ 0   68:    (* a queue's type. Allows a queue to be expressed by its element/index,
+ 0   69:       its front index, and its rear index *)
+ 0   70:  
+ 0   71:    queuetype=record
+ 1   72:       elements:array[indextype] of elementtype;  
+ 1   73:       front:indextype;
+ 1   74:       rear:indextype;
+ 1   75:    end;
+ 0   76: 
+ 0   77: var
+ 0   78:    que1,                 (* a queue being declared *)
+ 0   79:    tempqueue,           
+ 0   80:    tempqueue2            (* tempqueue and tempqueue2 are two queues being declared
+VPas Version 1.01 [26-Aug-88]
+
+
+ 0   81:                             to allow the program to interchange elements of a
+ 0   82:                             queue to avoid violating encapsulation *)
+ 0   83: 
+ 0   84:       :queuetype;
+ 0   85: 
+ 0   86:    ch,                   (* variable for the character being passed in to 
+ 0   87:                             a queue module *)
+ 0   88:    tmpch,                (* variable used in conjunction with the deq module
+ 0   89:                             which allows the procedure to 'delete' an element *) 
+ 0   90:    dequeuedelem          (* variable used in conjunction with the deq module
+ 0   91:                             which allows the procedure to output by value
+ 0   92:                             parameter the element which has been de-queued *)
+ 0   93:       :elementtype;
+ 0   94: 
+ 0   95:    outfile      
+ 0   96:       :text;              (* output file called 'output.que' *)
+ 0   97:    time         
+ 0   98:       :integer;           (* variable of time delay *)
+ 0   99:    
+ 0  100: procedure delay(var time:integer);
+ 0  101: 
+ 0  102: (********************************************************************************
+ 0  103:  *                                                                              *
+ 0  104:  * procedure :delay                                                             *
+ 0  105:  * purpose: This procedure simply delays a queue manipulation to allow the user *
+ 0  106:  *          to see the changes (if any)                                         *
+ 0  107:  *                                                                              *
+ 0  108:  * parameters: recieves the variable parameter time.                            *
+ 0  109:  * called by: the main driver                                                   *
+ 0  110:  * calls: none                                                                  *
+ 0  111:  *                                                                              *
+ 0  112:  ********************************************************************************)
+ 0  113: 
+ 0  114:    var y:integer;    (* counter *)
+ 0  115: 
+ 0  116:    begin
+ 1  117:    for y:=1 to time do
+ 1  118:       ;
+ 1  119:    end;     (* delay *)
+ 0  120: 
+ 0  121:    
+ 0  122: procedure quetraceoff(anyqueue:queuetype);
+Symbols in DELAY:
+
+	DELAY [1,734] Procedure
+
+	Type size: 8
+	4 bytes of parameters
+VPas Version 1.01 [26-Aug-88]
+
+
+	0 result address
+	TIME [2,12] Var Parameter
+	Y [2,-8] Var
+
+ 0  123: 
+ 0  124: (********************************************************************************
+ 0  125:  *                                                                              *
+ 0  126:  * procedure: quetraceoff                                                       *
+ 0  127:  * Purpose: This procedure deletes the four lines where the trace facility      *
+ 0  128:  *          appears.                                                            *
+ 0  129:  *                                                                              *
+ 0  130:  * Parameters: recieves any queue.                                              *
+ 0  131:  * Called by: possibly the main driver                                          *
+ 0  132:  * Calls: none                                                                  *
+ 0  133:  *                                                                              *
+ 0  134:  ********************************************************************************)
+ 0  135: 
+ 0  136:    var a:integer;    (* counter *)
+ 0  137: 
+ 0  138:    begin
+ 1  139: 
+ 1  140:    (* the following loop allows each line of the trace facility to be cleared
+ 1  141:       by using the escape sequence <esc> [K which clears a line from left to
+ 1  142:       right by first placing the cursor at the beginning of each line *)
+ 1  143: 
+ 1  144:    for a:=firstrow to fourthrow do
+ 1  145:       begin
+ 2  146:       write(chr(escape),'[');
+ 2  147:       write(a div 10:1,a mod 10:1,';'); 
+ 2  148:       write(toprowcol div 10:1,toprowcol mod 10:1,'H');
+ 2  149:       write(chr(escape),'[K');
+ 2  150:       end;
+ 1  151:    end;      (* quetraceoff *) 
+ 0  152: 
+ 0  153: 
+ 0  154: function emptyqueue(anyqueue:queuetype):boolean;  
+Symbols in QUETRACEOFF:
+
+	QUETRACEOFF [1,1058] Procedure
+
+	Type size: 8
+	106 bytes of parameters
+	0 result address
+	A [2,-8] Var
+	ANYQUEUE [2,12] Parameter
+
+ 0  155: 
+ 0  156: (********************************************************************************
+ 0  157:  *                                                                              *
+ 0  158:  * Function: emptyqueue                                                         *
+ 0  159:  * Purpose: This function determines whether a queue is empty. If so, TRUE is   *
+ 0  160:  *          returned, otherwise, FALSE                                          *
+VPas Version 1.01 [26-Aug-88]
+
+
+ 0  161:  *                                                                              *
+ 0  162:  * Called by: the procedures deq, printque, and quetracedeq                     * 
+ 0  163:  *                                                                              *
+ 0  164:  ********************************************************************************) 
+ 0  165: 
+ 0  166:    begin
+ 1  167:    emptyqueue:=anyqueue.rear=anyqueue.front;
+ 1  168:    end;   (* emptyqueue *)
+ 0  169: 
+ 0  170: function fullqueue(anyqueue:queuetype):boolean;
+Symbols in EMPTYQUEUE:
+
+	EMPTYQUEUE [1,1764] Function
+
+	Type size: 4
+	106 bytes of parameters
+	0 result address
+	ANYQUEUE [2,12] Parameter
+
+ 0  171: 
+ 0  172: (********************************************************************************
+ 0  173:  *                                                                              *
+ 0  174:  * Function: fullqueue                                                          *
+ 0  175:  * Purpose: This function determines whether a queue is empty. If so, TRUE is   *
+ 0  176:  *          returned, otherwise, FALSE                                          *
+ 0  177:  *                                                                              *
+ 0  178:  * Called by: the procedure enq                                                 *
+ 0  179:  *                                                                              *
+ 0  180:  ********************************************************************************)
+ 0  181: 
+ 0  182:    var nextrear:indextype;
+ 0  183: 
+ 0  184:    begin
+ 1  185:    if (anyqueue.rear=maxqueue)
+ 1  186:       then
+ 1  187:          nextrear:=1
+ 1  188:       else
+ 1  189:          nextrear:=anyqueue.rear+1;
+ 1  190: 
+ 1  191:    fullqueue:=nextrear = anyqueue.front;
+ 1  192: 
+ 1  193:    end;     (* fullqueue *)
+ 0  194: 
+ 0  195: 
+ 0  196: procedure enq(var anyqueue:queuetype;var ch:elementtype);
+Symbols in FULLQUEUE:
+
+	FULLQUEUE [1,1968] Function
+
+	Type size: 6
+VPas Version 1.01 [26-Aug-88]
+
+
+	106 bytes of parameters
+	0 result address
+	ANYQUEUE [2,12] Parameter
+	NEXTREAR [2,-5] Var
+
+ 0  197: 
+ 0  198: (********************************************************************************
+ 0  199:  *                                                                              *
+ 0  200:  * procedure: enq                                                               *
+ 0  201:  * Purpose: this procedure accepts a queue and a variable ch. It then tests     *
+ 0  202:  *          for a fullqueue. If not, the rear increases by one(wraps around     *
+ 0  203:  *          if necessary) and puts the ch parameter in the queues rear position *
+ 0  204:  *                                                                              *
+ 0  205:  * Called by: procedures printque, quetraceenq, quetracedeq, & possibly the     *
+ 0  206:  *            main driver                                                       *
+ 0  207:  * Calls: the function fullqueue                                                *
+ 0  208:  *                                                                              *
+ 0  209:  ********************************************************************************) 
+ 0  210: 
+ 0  211:    begin
+ 1  212:    if (not (fullqueue(anyqueue)))
+ 1  213:       then
+ 1  214:       begin
+ 2  215:       anyqueue.rear:=(anyqueue.rear mod maxqueue)+1;
+ 2  216:       anyqueue.elements[anyqueue.rear]:=ch;
+ 2  217:       end;
+ 1  218:    end;   (* enq *)
+ 0  219: 
+ 0  220: procedure deq(var anyqueue:queuetype;tmpch:elementtype;var dequeuedelem
+Symbols in ENQ:
+
+	ENQ [1,2386] Procedure
+
+	Type size: 4
+	8 bytes of parameters
+	0 result address
+	ANYQUEUE [2,16] Var Parameter
+	CH [2,12] Var Parameter
+
+ 0  221:               :elementtype);
+ 0  222: 
+ 0  223: (********************************************************************************
+ 0  224:  *                                                                              *
+ 0  225:  * Procedure: deq                                                               *
+ 0  226:  * Purpose: this procedure recieves a queue, and the tmpch character. Then,     *
+ 0  227:  *          the procedure tests for an empty queue. If not, the queue's front   *
+ 0  228:  *          index is incremented. Then the element in this registar is          *
+ 0  229:  *          assigned to dequeuedelem which denotes the char being de-queued.    *
+ 0  230:  *          Finally, the character's index is replaced by the null character    *
+ 0  231:  *          tmpch.                                                              *
+ 0  232:  *                                                                              *
+ 0  233:  * Called by: the procedures printque, quetracedeq, & possibly the main driver  *
+VPas Version 1.01 [26-Aug-88]
+
+
+ 0  234:  * Calls: the function emptyqueue                                               *
+ 0  235:  *                                                                              *
+ 0  236:  ********************************************************************************)
+ 0  237: 
+ 0  238:    begin
+ 1  239:    if (not (emptyqueue(anyqueue)))
+ 1  240:       then
+ 1  241:       begin
+ 2  242:       anyqueue.front:=(anyqueue.front mod maxqueue)+1;
+ 2  243:       dequeuedelem:=anyqueue.elements[anyqueue.front];
+ 2  244:       anyqueue.elements[anyqueue.front]:=tmpch;
+ 2  245:       end;
+ 1  246:    end;    (* deq *)
+ 0  247: 
+ 0  248: function sizequeue(anyqueue:queuetype):integer;
+Symbols in DEQ:
+
+	DEQ [1,2848] Procedure
+
+	Type size: 4
+	10 bytes of parameters
+	0 result address
+	ANYQUEUE [2,18] Var Parameter
+	DEQUEUEDELEM [2,12] Var Parameter
+	TMPCH [2,16] Parameter
+
+ 0  249: 
+ 0  250: (********************************************************************************
+ 0  251:  *                                                                              *
+ 0  252:  * Function sizequeue                                                           *
+ 0  253:  * Purpose: This function determines the size of a queue. By comparing the      *
+ 0  254:  *          front and rear indexes, the size of a queue can be obtained.        *
+ 0  255:  *                                                                              *
+ 0  256:  * Called by: procedures quetraceenq and quetracedeq                            *
+ 0  257:  *                                                                              *
+ 0  258:  ********************************************************************************)
+ 0  259: 
+ 0  260:    begin
+ 1  261:    if (anyqueue.front<=anyqueue.rear)
+ 1  262:       then
+ 1  263:          sizequeue:=anyqueue.rear-anyqueue.front
+ 1  264:       else
+ 1  265:          sizequeue:=(maxqueue)-(anyqueue.front-anyqueue.rear);
+ 1  266: 
+ 1  267:    end;   (* sizequeue *)
+ 0  268: 
+ 0  269: procedure printque(var anyqueue,tempqueue2:queuetype);
+Symbols in SIZEQUEUE:
+
+	SIZEQUEUE [1,3384] Function
+
+	Type size: 4
+VPas Version 1.01 [26-Aug-88]
+
+
+	106 bytes of parameters
+	0 result address
+	ANYQUEUE [2,12] Parameter
+
+ 0  270: 
+ 0  271: (********************************************************************************
+ 0  272:  *                                                                              *
+ 0  273:  * Procedure printque                                                           *
+ 0  274:  * Purpose: This procedure outputs a queue to the output file 'output.que'      *
+ 0  275:  *          It outputs the queue's elements one by one by transferring them     *
+ 0  276:  *          to a temporary queue called tempqueue2. Then the procedure          *
+ 0  277:  *          transfers them all back to the parameter queue.                     *
+ 0  278:  *                                                                              * 
+ 0  279:  * Called by: possibly the main driver                                          *
+ 0  280:  * Calls: This procedure calls deq and enq in order to transfer elements. It    *
+ 0  281:  *        also calls emptyqueue to determine when to stop de-queueing.          *
+ 0  282:  *                                                                              *
+ 0  283:  ********************************************************************************)
+ 0  284: 
+ 0  285:    var dumchar,            (* null character to avoid using tmpch as this would
+ 0  286:                               be a global variable *)
+ 0  287:        transferelem        (* the de-queued element also used to avoid a global
+ 0  288:                               variable *)
+ 0  289:           :elementtype;
+ 0  290:        
+ 0  291:    begin
+ 1  292: 
+ 1  293:    writeln(outfile);
+ 1  294:    tempqueue2.front:=anyqueue.front;
+ 1  295:    tempqueue2.rear:=tempqueue2.front;
+ 1  296: 
+ 1  297:    (* tranfers elements in parameter anyqueue to tempqueue2 *)
+ 1  298: 
+ 1  299:    while (not(emptyqueue(anyqueue))) do
+ 1  300:       begin
+ 2  301:       deq(anyqueue,dumchar,transferelem);
+ 2  302:       enq(tempqueue2,transferelem);
+ 2  303:       write(outfile,transferelem);
+ 2  304:       end;
+ 1  305:    anyqueue.front:=tempqueue2.front;
+ 1  306:    anyqueue.rear:=anyqueue.front;
+ 1  307: 
+ 1  308:    (* transfers elements in tempqueue2 back in parameter emptyqueue *)
+ 1  309: 
+ 1  310:    while (not(emptyqueue(tempqueue2))) do
+ 1  311:       begin
+ 2  312:       deq(tempqueue2,dumchar,transferelem);
+ 2  313:       enq(anyqueue,transferelem);
+VPas Version 1.01 [26-Aug-88]
+
+
+ 2  314:       end;
+ 1  315:    end;    (* printque *)
+ 0  316: 
+ 0  317:       
+ 0  318: 
+ 0  319: procedure showsize(anyqueue:queuetype);
+Symbols in PRINTQUE:
+
+	PRINTQUE [1,3838] Procedure
+
+	Type size: 6
+	8 bytes of parameters
+	0 result address
+	ANYQUEUE [2,16] Var Parameter
+	DUMCHAR [2,-5] Var
+	TEMPQUEUE2 [2,12] Var Parameter
+	TRANSFERELEM [2,-6] Var
+
+ 0  320: 
+ 0  321: (********************************************************************************
+ 0  322:  *                                                                              *
+ 0  323:  * Procedure showsize                                                           *
+ 0  324:  * Purpose: this procedure determines whether a queue is less than or equal     *
+ 0  325:  *          to 10 elements. If so, the rightmost bar of the trace facility      *
+ 0  326:  *          is added. If not, it is removed.                                    *
+ 0  327:  *                                                                              *
+ 0  328:  * Called by: The procedures quetraceon, quetraceenq and quetracedeq.           *
+ 0  329:  * Calls: the function sizequeue                                                *
+ 0  330:  *                                                                              *
+ 0  331:  ********************************************************************************)
+ 0  332: 
+ 0  333:    var det:char;    (* the appropriate rightmost character *)
+ 0  334: 
+ 0  335:    begin
+ 1  336:    if ((sizequeue(anyqueue))<=numelemintrace)
+ 1  337:       then
+ 1  338:          det:=bar
+ 1  339:       else
+ 1  340:          det:=blank;
+ 1  341:    write(chr(escape),'[');
+ 1  342:    write(secondrow div 10:1,secondrow mod 10:1,';');
+ 1  343:    write(mostcol div 10:1,mostcol mod 10:1,'H');
+ 1  344:    write(det);
+ 1  345:    end;     (* showsize *)
+ 0  346: 
+ 0  347:    
+ 0  348: procedure clearqueue(var anyqueue:queuetype);
+Symbols in SHOWSIZE:
+
+	SHOWSIZE [1,4910] Procedure
+
+	Type size: 6
+	106 bytes of parameters
+VPas Version 1.01 [26-Aug-88]
+
+
+	0 result address
+	ANYQUEUE [2,12] Parameter
+	DET [2,-5] Var
+
+ 0  349: 
+ 0  350: (********************************************************************************
+ 0  351:  *                                                                              *
+ 0  352:  * Procedure clearqueue                                                         *
+ 0  353:  * Purpose: This procedure simply clears a queue by setting the rear and front  *
+ 0  354:  *          indexes to the same number (0)                                      *
+ 0  355:  *                                                                              *
+ 0  356:  * Called by: possibly the main driver                                          *
+ 0  357:  * Calls: none.                                                                 *
+ 0  358:  *                                                                              *
+ 0  359:  ********************************************************************************)      
+ 0  360: 
+ 0  361:    begin
+ 1  362:    anyqueue.rear:=clearindex;
+ 1  363:    anyqueue.front:=clearindex;
+ 1  364:    end;    (* clearqueue *)
+ 0  365: 
+ 0  366: procedure quetraceclearque(var anyqueue:queuetype);
+Symbols in CLEARQUEUE:
+
+	CLEARQUEUE [1,5526] Procedure
+
+	Type size: 4
+	4 bytes of parameters
+	0 result address
+	ANYQUEUE [2,12] Var Parameter
+
+ 0  367: 
+ 0  368: (********************************************************************************
+ 0  369:  *                                                                              *
+ 0  370:  * Procedure quetraceclearque                                                   *
+ 0  371:  * Purpose: This procedure clears a queue by calling the procedure clearqueue   *
+ 0  372:  *          and then fills in the spaces intended for elements in the trace     *
+ 0  373:  *          facility with blanks.                                               *
+ 0  374:  *                                                                              * 
+ 0  375:  * Called by: possibly the main driver                                          *
+ 0  376:  * Calls: the function clearqueue                                               *
+ 0  377:  *                                                                              *
+ 0  378:  ********************************************************************************)
+ 0  379: 
+ 0  380:    var b   
+ 0  381:       :integer;       (* counter *)
+ 0  382: 
+ 0  383:    begin
+ 1  384:    clearqueue(anyqueue);
+ 1  385:    for b:= leastcol to mostcol do
+ 1  386:       begin
+VPas Version 1.01 [26-Aug-88]
+
+
+ 2  387:       if ((b mod 2)=0)    (* print to even columns only *)
+ 2  388:          then
+ 2  389:          begin
+ 3  390:          write(chr(escape),'[');
+ 3  391:          write(secondrow div 10:1,secondrow mod 10:1,';');
+ 3  392:          write(b div 10:1,b mod 10:1,'H');
+ 3  393:          write(blank);
+ 3  394:          end;
+ 2  395:       end;
+ 1  396:    end;     (* quetraceclearque *)
+ 0  397: 
+ 0  398: 
+ 0  399: procedure quetraceon(var anyqueue:queuetype);
+Symbols in QUETRACECLEARQUE:
+
+	QUETRACECLEARQUE [1,5774] Procedure
+
+	Type size: 8
+	4 bytes of parameters
+	0 result address
+	ANYQUEUE [2,12] Var Parameter
+	B [2,-8] Var
+
+ 0  400: 
+ 0  401: (********************************************************************************
+ 0  402:  *                                                                              *
+ 0  403:  * Procedure quetraceon                                                         *
+ 0  404:  * Purpose: this procedure prints the trace facility (outline) to the screen.   *
+ 0  405:  *          Also, the rightmost character is determined and printed by the      *
+ 0  406:  *          showsize procedure.                                                 *
+ 0  407:  *                                                                              *
+ 0  408:  * Called by: possibly the main driver                                          *
+ 0  409:  * Calls: the procedure showsize                                                *
+ 0  410:  *                                                                              *
+ 0  411:  ********************************************************************************)
+ 0  412: 
+ 0  413: var i:integer;     (* counter *)
+ 0  414: 
+ 0  415:    begin
+ 1  416: 
+ 1  417:    (* loop to print appropriate character in trace outline *)
+ 1  418: 
+ 1  419:    for i:=leastcol to mostcol do
+ 1  420:       begin
+ 2  421:       write(chr(escape),'[');
+ 2  422:       write(firstrow div 10:1,firstrow mod 10:1,';');
+ 2  423:       write(i div 10:1,i mod 10:1,'H');
+ 2  424:       write(horzbar);
+ 2  425:       if (i mod 2)<>0    (* prints to even columns only *)
+ 2  426:          then
+VPas Version 1.01 [26-Aug-88]
+
+
+ 2  427:             begin
+ 3  428:             write(chr(escape),'[');
+ 3  429:             write(secondrow div 10:1,secondrow mod 10:1,';');
+ 3  430:             write(i div 10:1,i mod 10:1,'H');
+ 3  431:             write(bar);
+ 3  432:             end;
+ 2  433:       write(chr(escape),'[');
+ 2  434:       write(thirdrow div 10:1,thirdrow mod 10:1,';');
+ 2  435:       write(i div 10:1,i mod 10:1,'H');
+ 2  436:       write(horzbar);
+ 2  437:       end;            (* quetraceon *)
+ 1  438: 
+ 1  439:    write(chr(escape),'[24;31H');
+ 1  440:    write(heading);
+ 1  441:    showsize(anyqueue);
+ 1  442:    end;      
+ 0  443: 
+ 0  444: procedure clearscreen;
+Symbols in QUETRACEON:
+
+	QUETRACEON [1,6546] Procedure
+
+	Type size: 8
+	4 bytes of parameters
+	0 result address
+	ANYQUEUE [2,12] Var Parameter
+	I [2,-8] Var
+
+ 0  445: 
+ 0  446: (********************************************************************************
+ 0  447:  *                                                                              *
+ 0  448:  * Procedure clearscreen                                                        *
+ 0  449:  * Purpose: This procedure simply clears the screen using the escape function   *
+ 0  450:  *          seen below.                                                         *
+ 0  451:  *                                                                              *
+ 0  452:  * Called by: possibly the main driver                                          *
+ 0  453:  * Calls: none.                                                                 *
+ 0  454:  *                                                                              *
+ 0  455:  ********************************************************************************)
+ 0  456:         
+ 0  457: 
+ 0  458:    begin   
+ 1  459:    write(chr(escape),'[1;1H');
+ 1  460:    write(chr(escape),'[J');
+ 1  461:    end;  (* clearscreen *)
+ 0  462: 
+ 0  463: function getchar:char;
+Symbols in CLEARSCREEN:
+
+	CLEARSCREEN [1,8174] Procedure
+
+VPas Version 1.01 [26-Aug-88]
+
+
+	Type size: 4
+	0 bytes of parameters
+	0 result address
+
+ 0  464: 
+ 0  465: (********************************************************************************
+ 0  466:  *                                                                              * 
+ 0  467:  * Function getchar                                                             *
+ 0  468:  * Purpose: This function is called by the procedure startup. The function      *
+ 0  469:  *          waits for the user to hit a key to continue. This 'dummygetchar'    *
+ 0  470:  *          calls the function which allows the function to procede with the    *
+ 0  471:  *          program                                                             *
+ 0  472:  *                                                                              *
+ 0  473:  * Called by: the procedure startup                                             *
+ 0  474:  *                                                                              * 
+ 0  475:  ********************************************************************************)
+ 0  476: 
+ 0  477: var getch:char;     (* assigned to the functon name for the program to continue *) 
+ 0  478: 
+ 0  479:    begin
+ 1  480:    direct_io;
+ 1  481:    read(getch);
+ 1  482:    normal_io;
+ 1  483:    getchar:=getch;
+ 1  484:    end;   (* getchar *)
+ 0  485: 
+ 0  486: procedure startup;
+Symbols in GETCHAR:
+
+	GETCHAR [1,8472] Function
+
+	Type size: 6
+	0 bytes of parameters
+	0 result address
+	GETCH [2,-5] Var
+
+ 0  487: 
+ 0  488: (********************************************************************************
+ 0  489:  *                                                                              *
+ 0  490:  * Procedure startup                                                            *
+ 0  491:  * Purpose: This procedure is a startup ot title screen for the program.        *
+ 0  492:  *          It contains information on the program and programmer.              *
+ 0  493:  *                                                                              *
+ 0  494:  * Called by: possibly the main driver                                          *
+ 0  495:  * Calls: the function getchar to allow user to proceed at will.                *
+ 0  496:  *                                                                              * 
+ 0  497:  ********************************************************************************)
+ 0  498:  
+ 0  499:    var dummygetchar:char;   (* used to call function getchar *)
+VPas Version 1.01 [26-Aug-88]
+
+
+ 0  500: 
+ 0  501:    begin
+ 1  502:    write(chr(escape),'[1;1H');
+ 1  503:    writeln('program : quetrace');
+ 1  504:    writeln;  
+ 1  505:    writeln('This program demonstrates the structure of a Queue Data Structure');
+ 1  506:    writeln('Also included is a dynamid trace facility which allows the user to');
+ 1  507:    writeln('see the changes to the queue structure as they are being changed.');
+ 1  508:    writeln;
+ 1  509:    writeln('Programmer : Greg Fudala');
+ 1  510:    writeln('729 O Shaughnessey Hall');
+ 1  511:    writeln('232-2915');
+ 1  512:    writeln;
+ 1  513:    writeln('Hit a key to continue');
+ 1  514:    dummygetchar:=getchar;   (* function call to getchar *)
+ 1  515:    end;     (* startup *)
+ 0  516: 
+ 0  517: 
+ 0  518: procedure gotoxy(var anyqueue:queuetype;var row,col:integer);
+Symbols in STARTUP:
+
+	STARTUP [1,8732] Procedure
+
+	Type size: 6
+	0 bytes of parameters
+	0 result address
+	DUMMYGETCHAR [2,-5] Var
+
+ 0  519: 
+ 0  520: (********************************************************************************
+ 0  521:  *                                                                              *
+ 0  522:  * Procedure gotoxy                                                             *
+ 0  523:  * Purpose: This procedure, after taken in a queue, row, and column, goes to    *
+ 0  524:  *          the appropriate space in the trace where the element is to be       *
+ 0  525:  *          placed.                                                             *
+ 0  526:  *                                                                              *
+ 0  527:  * Called by: the procedures quetraceenq and quetracedeq.                       *
+ 0  528:  * Calls: none.                                                                 *
+ 0  529:  *                                                                              *
+ 0  530:  ********************************************************************************)
+ 0  531:         
+ 0  532: 
+ 0  533:    begin
+ 1  534:    write(chr(escape),'[');
+ 1  535:    write(row div 10:1,row mod 10:1,';');
+ 1  536:    write(col div 10:1,col mod 10:1,'H');
+ 1  537:    end;      (* gotoxy *)
+ 0  538: 
+ 0  539: 
+VPas Version 1.01 [26-Aug-88]
+
+
+ 0  540: procedure quetraceenq(var anyqueue:queuetype;ch:elementtype);
+Symbols in GOTOXY:
+
+	GOTOXY [1,9780] Procedure
+
+	Type size: 4
+	12 bytes of parameters
+	0 result address
+	ANYQUEUE [2,20] Var Parameter
+	COL [2,12] Var Parameter
+	ROW [2,16] Var Parameter
+
+ 0  541: 
+ 0  542: (********************************************************************************
+ 0  543:  *                                                                              *
+ 0  544:  * Procedure quetraceenq                                                        *
+ 0  545:  * Purpose: This procedure, having been called with a queue parameter and a     *
+ 0  546:  *          character, enqueues this character, ch, into the queue passed       *
+ 0  547:  *          in. It then outputs this character into the trace outline in the    *
+ 0  548:  *          appropriate space. The procedure determines the correct space by    *
+ 0  549:  *          determining the size of the queue by calling sizequeue. The column  *
+ 0  550:  *          position can be easily derived from there. Then gotoxy is called    *
+ 0  551:  *          for the program to move to the correct spot in the trace. Once the  *
+ 0  552:  *          char. is printed to the screen(if necessary), the procedure calls   *
+ 0  553:  *          showsize which allows the user to see if the queue has exceeded     *
+ 0  554:  *          10 elements.                                                        *
+ 0  555:  *                                                                              *
+ 0  556:  * Called by: possibly the main driver                                          *
+ 0  557:  * Calls: sizequeue and showsize.                                               *
+ 0  558:  *                                                                              *
+ 0  559:  ********************************************************************************)
+ 0  560:  
+ 0  561:    var enqrowpos,        (* row position *)
+ 0  562:        enqcolpos         (* column position *)
+ 0  563:           :integer;
+ 0  564:    begin
+ 1  565:       enq(anyqueue,ch); 
+ 1  566:       enqrowpos:=secondrow;
+ 1  567:       enqcolpos:=((2*sizequeue(anyqueue)))+30;
+ 1  568:       if ((sizequeue(anyqueue))<=10)          (* only print in trace *)
+ 1  569:          then
+ 1  570:          begin
+ 2  571:          gotoxy(anyqueue,enqrowpos,enqcolpos);
+ 2  572:          write(ch);
+ 2  573:          end;
+ 1  574:       showsize(anyqueue);
+ 1  575:    end;
+ 0  576: 
+ 0  577: 
+ 0  578: procedure quetracedeq(var anyqueue,tempqueue:queuetype;ch:elementtype);
+Symbols in QUETRACEENQ:
+VPas Version 1.01 [26-Aug-88]
+
+
+
+	QUETRACEENQ [1,10302] Procedure
+
+	Type size: 12
+	6 bytes of parameters
+	0 result address
+	ANYQUEUE [2,14] Var Parameter
+	CH [2,12] Parameter
+	ENQCOLPOS [2,-12] Var
+	ENQROWPOS [2,-8] Var
+
+ 0  579: 
+ 0  580: (********************************************************************************
+ 0  581:  *                                                                              *
+ 0  582:  * Procedure quetracedeq                                                        *
+ 0  583:  * Purpose: This procedure dequeues an element fron the queue passed in. Then,  *
+ 0  584:  *          a loop is run which transfers the elements of the queue to a        *
+ 0  585:  *          temporary queue called tempqueue. In the loop, once an element has  *
+ 0  586:  *          been dequeued, if the size of the queue is less than ot equal to    *
+ 0  587:  *          ten elements, gotoxy is called and that character is printed in the *
+ 0  588:  *          appropriate space in the trace. In essence, the original queue is   *
+ 0  589:  *          being shifted to the left and being put in the temporary queue      *
+ 0  590:  *          while shifting. The temporary queue is needed to avoid violating    *
+ 0  591:  *          encapsulation. One entire shift is only the result of one           *
+ 0  592:  *          dequeued element. then, a loop is run to fill in blanks in the      *
+ 0  593:  *          trace where the shift left an element space in the trace open (if   *
+ 0  594:  *          necessary) Then, the temporary queue, now with one dequeued element *
+ 0  595:  *          (if the original queue was not empty), is moved back into the queue *
+ 0  596:  *          parameter passed in. The procedure is called each time one element  *
+ 0  597:  *          is to be dequeued. Finally, showsize is called to print the         *
+ 0  598:  *          appropriate character to the screen dependant on the size. This     *
+ 0  599:  *          procedure is called until the loop in the main driver runs out.     *
+ 0  600:  *                                                                              *
+ 0  601:  * Called by: possibly the main driver                                          *
+ 0  602:  * Calls: deq, enq, emptyqueue, sizequeue, gotoxy, and showsize                 *
+ 0  603:  *                                                                              *
+ 0  604:  ********************************************************************************)
+ 0  605: 
+ 0  606:   var deqrowpos,       (* row position *)
+ 0  607:       deqcolpos,       (* column position *)
+ 0  608:       size,            (* size of the temporary queue plus one to account for
+ 0  609:                           the extra dequeued element *)
+ 0  610:       diff,            (* number of most element positions minus blank space to
+ 0  611:                           account for empty spaces in the trace *)
+ 0  612:       blankspace,      (* derives how many spaces to print a blank ,only
+ 0  613:                           the even spaces *)
+ 0  614:       previous,        (* allows the procedure to know what index the passed
+ 0  615:                           in queue had before manipulating the queue. It is 
+ 0  616:                           needed later when the procedure is called again. The
+ 0  617:                           index for the passed in queue must be incremented
+ 0  618:                           relative to its position before entering the procedure
+ 0  619:                           beforehand *)
+VPas Version 1.01 [26-Aug-88]
+
+
+ 0  620:       y                (* counter *)
+ 0  621:          :integer;
+ 0  622: 
+ 0  623:       dumchar,         (* dummy null char. used instead of tmpch to avoid
+ 0  624:                           using global variables *)
+ 0  625:       transferelem     (* the de-queued element also used to avoid global
+ 0  626:                           variables *)    
+ 0  627:          :elementtype;   
+ 0  628: 
+ 0  629:    begin
+ 1  630:    previous:=anyqueue.front;
+ 1  631:    deq(anyqueue,dumchar,transferelem);
+ 1  632:    while (not(emptyqueue(anyqueue))) do
+ 1  633:       begin
+ 2  634:       deq(anyqueue,dumchar,transferelem);
+ 2  635:       enq(tempqueue,transferelem);
+ 2  636:       deqrowpos:=secondrow;
+ 2  637:       deqcolpos:=((2*sizequeue(tempqueue)))+30;
+ 2  638: 
+ 2  639: (* prints shifted elements while shifting *)
+ 2  640: 
+ 2  641:       if ((sizequeue(tempqueue))<=10)
+ 2  642:          then
+ 2  643:          begin
+ 3  644:          gotoxy(tempqueue,deqrowpos,deqcolpos);
+ 3  645:          write(transferelem);
+ 3  646:          end;
+ 2  647:       end;
+ 1  648: 
+ 1  649: 
+ 1  650: (* prints blanks where necessary *)
+ 1  651: 
+ 1  652:       size:=sizequeue(tempqueue)+1;
+ 1  653:       blankspace:=(numelemintrace-size)*2;
+ 1  654:       diff:=mostelemcol-blankspace;
+ 1  655:       for y:=mostelemcol downto diff do
+ 1  656:          if (diff>=leastelemcol) and ((y mod 2)=0) 
+ 1  657:             then
+ 1  658:             begin
+ 2  659:             write(chr(escape),'[');
+ 2  660:             write(secondrow div 10:1,secondrow mod 10:1,';');
+ 2  661:             write(y div 10:1,y mod 10:1,'H');
+ 2  662:             write(blank);
+ 2  663:             end;
+ 1  664: 
+ 1  665: 
+ 1  666:       anyqueue.front:=(previous mod maxqueue)+1; 
+VPas Version 1.01 [26-Aug-88]
+
+
+ 1  667:       anyqueue.rear:=anyqueue.front; 
+ 1  668: 
+ 1  669: (* putting elements in tempqueue back in anyqueue parameter *)
+ 1  670: 
+ 1  671:    while(not(emptyqueue(tempqueue))) do
+ 1  672:       begin
+ 2  673:       deq(tempqueue,dumchar,transferelem);
+ 2  674:       enq(anyqueue,transferelem);
+ 2  675:       end;
+ 1  676: 
+ 1  677: tempqueue.front:=anyqueue.front;
+ 1  678: tempqueue.rear:=anyqueue.front;
+ 1  679: 
+ 1  680:    showsize(anyqueue);
+ 1  681:  
+ 1  682:    end;    (* quetracedeq *)
+ 0  683: 
+ 0  684: begin  (* main *)
+Symbols in QUETRACEDEQ:
+
+	QUETRACEDEQ [1,11064] Procedure
+
+	Type size: 34
+	10 bytes of parameters
+	0 result address
+	ANYQUEUE [2,18] Var Parameter
+	BLANKSPACE [2,-24] Var
+	CH [2,12] Parameter
+	DEQCOLPOS [2,-12] Var
+	DEQROWPOS [2,-8] Var
+	DIFF [2,-20] Var
+	DUMCHAR [2,-33] Var
+	PREVIOUS [2,-28] Var
+	SIZE [2,-16] Var
+	TEMPQUEUE [2,14] Var Parameter
+	TRANSFERELEM [2,-34] Var
+	Y [2,-32] Var
+
+ 1  685: 
+ 1  686: time:=wait;                    (* time gets value of constant wait *)
+ 1  687: 
+ 1  688: rewrite(outfile,'output.que');    (* opens text file for output data *)
+ 1  689: 
+ 1  690: clearscreen;
+ 1  691: startup;
+ 1  692: clearscreen;
+ 1  693: clearqueue(que1);
+ 1  694: clearqueue(tempqueue);
+ 1  695: quetraceon(que1);
+ 1  696: for ch:='A' to 'E' do
+ 1  697:    quetraceenq(que1,ch);
+ 1  698: printque(que1,tempqueue2);
+ 1  699: for ch:='F' to 'J' do
+ 1  700:    quetraceenq(que1,ch);
+ 1  701: delay(time);
+ 1  702: printque(que1,tempqueue2);
+ 1  703: for ch:='a' to 'e' do
+ 1  704:    quetracedeq(que1,tempqueue,tmpch);
+ 1  705: printque(que1,tempqueue2);
+ 1  706: delay(time);
+VPas Version 1.01 [26-Aug-88]
+
+
+ 1  707: for ch:='<' to '@' do
+ 1  708:    quetraceenq(que1,ch);
+ 1  709: printque(que1,tempqueue2);
+ 1  710: delay(time);
+ 1  711: for ch:='r' to 'z' do
+ 1  712:    quetraceenq(que1,ch);
+ 1  713: printque(que1,tempqueue2);
+ 1  714: delay(time);
+ 1  715: quetraceoff(que1);
+ 1  716: for ch:='a' to 'f' do
+ 1  717:    quetracedeq(que1,tempqueue,tmpch);
+ 1  718: printque(que1,tempqueue2);
+ 1  719: delay(time);
+ 1  720: for ch:='4' to '9' do
+ 1  721:    enq(que1,ch);
+ 1  722: printque(que1,tempqueue2);
+ 1  723: delay(time);
+ 1  724: quetraceon(que1);
+ 1  725: for ch:='1' to '4' do
+ 1  726:    quetracedeq(que1,tempqueue,tmpch);
+ 1  727: printque(que1,tempqueue2);
+ 1  728: delay(time);
+ 1  729: quetraceclearque(que1);
+ 1  730: quetraceoff(que1);
+ 1  731: end.   (* main *)
+ 0  732: 
+VPas Version 1.01 [26-Aug-88]
+
+
+Procedures and functions
+
+     CLEARQUEUE (procedure) 348, 361
+     CLEARSCREEN (procedure) 444, 458
+     DELAY (procedure) 100, 116
+     DEQ (procedure) 220, 238
+     EMPTYQUEUE (function) 154, 166
+     ENQ (procedure) 196, 211
+     FULLQUEUE (function) 170, 184
+     GETCHAR (function) 463, 479
+     GOTOXY (procedure) 518, 533
+     PRINTQUE (procedure) 269, 291
+     QUETRACECLEARQUE (procedure) 366, 383
+     QUETRACEDEQ (procedure) 578, 629
+     QUETRACEENQ (procedure) 540, 564
+     QUETRACEOFF (procedure) 122, 138
+     QUETRACEON (procedure) 399, 415
+     SHOWSIZE (procedure) 319, 335
+     SIZEQUEUE (function) 248, 260
+     STARTUP (procedure) 486, 501
+
